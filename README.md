@@ -12,6 +12,9 @@ Fix your typos by repetition.
 # Config
 Check [config.example.toml](./config.example.toml)
 
+> [!IMPORTANT]  
+> Don't forget to add an extra space at the end of each line in your `paragraph`s
+
 # Keybinds
 |key|behavior|
 |---|--------|

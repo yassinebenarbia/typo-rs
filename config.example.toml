@@ -1,4 +1,4 @@
-# these are the default values for the style
+# these are the default values for the style and they are optional (you can emmit/delete them if you want)
 [style]
 spell_correct = [40, 230, 30, 50] # color of text if spelled correctly
 spell_error = [200, 30, 20, 90] # color of text if NOT spelled correctly

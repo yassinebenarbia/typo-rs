@@ -1,0 +1,52 @@
+# these are the default values for the style
+[style]
+spell_correct = [40, 230, 30, 50] # color of text if spelled correctly
+spell_error = [200, 30, 20, 90] # color of text if NOT spelled correctly
+shadow_text = [169, 169, 169, 100] # color of the background text 
+bg = [65, 105, 225, 100] # bacground color
+lighten = 0.9 # lighten effect for the background color (bg)
+word_color = [40, 200, 50, 90] # color of the world you are working on
+
+[[words]]
+word = "Exercises"
+finished = true # optional, defaults to false
+paragraph = """
+Daily exercises strengthen both body and mind significantly. Physical exercises like jogging, swimming, 
+or weightlifting boost endurance while mental exercises such as puzzles enhance cognitive function. 
+Regular exercises prevent health issues and improve mood remarkably. Many professionals recommend morning 
+exercises before breakfast for optimal results. Different exercises target various muscle groups effectively. 
+Remember to spell 'exercises' with 'cise' not 'size' - think 'exer-CISE-s'. Consistent exercises yield 
+long-term benefits surprisingly quickly. Always stretch before vigorous exercises to avoid injury. 
+Tracking progress in fitness exercises motivates continued effort. Group exercises provide social encouragement 
+while solitary exercises offer meditation time. Proper form during exercises prevents strain better than any remedy.
+"""
+
+[[words]]
+word = "Linux"
+finished = false
+paragraph = """
+I'd just like to interject for a moment. What you're refering to as Linux, is in fact, GNU/Linux, or as I've 
+recently taken to calling it, GNU plus Linux. Linux is not an operating system unto itself, but rather another 
+free component of a fully functioning GNU system made useful by the GNU corelibs, shell utilities and vital system 
+components comprising a full OS as defined by POSIX. Many computer users run a modified version of the GNU system every 
+day, without realizing it. Through a peculiar turn of events, the version of GNU which is widely used today is often 
+called Linux, and many of its users are not aware that it is basically the GNU system, developed by the GNU Project. 
+There really is a Linux, and these people are using it, but it is just a part of the system they use. Linux is the  
+kernel: the program in the system that allocates the machine's resources to the other programs that you run. The kernel 
+is an essential part of an operating system, but useless by itself; it can only function in the context of a complete 
+operating system. Linux is normally used in combination with the GNU operating system: the whole system is basically GNU 
+with Linux added, or GNU/Linux. All the so-called Linux distributions are really distributions of GNU/Linux! 
+"""
+
+[[words]]
+word = "Permanently"
+paragraph = """
+The stain was permanently set after the fabric dried completely. Digital records are permanently stored in cloud
+backup systems securely. Some decisions permanently alter life's trajectory profoundly. Remember 'permanently' comes
+from 'permanent' plus 'ly' - double 'n' is essential. Tattoos are considered permanently inked artwork on skin. Climate
+change effects may permanently damage coral reefs irreversibly. After the accident, his vision was permanently impaired
+unfortunately. Data deleted from drives isn't always permanently erased technically. The exhibition features permanently
+installed sculptures in the garden. Regulations permanently banned certain chemicals last decade. Email accounts may be
+permanently deactivated after prolonged inactivity. Diplomatic relations were permanently severed following the incident.
+Historical landmarks remain permanently protected by preservation laws.
+"""

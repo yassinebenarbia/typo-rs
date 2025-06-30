@@ -128,7 +128,13 @@ impl View for TypingBox {
         let mut others = self.written.chars().peekable();
         let top_margin = 10;
 
-        if let Some(paragraph) = self.paragraphs.get(self.paragraph_index) {
+        let paragraph_to_draw = if self.mode == Mode::Selecting {
+            self.paragraphs.get(self.selected_word_index)
+        } else {
+            self.paragraphs.get(self.paragraph_index)
+        };
+
+        if let Some(paragraph) = paragraph_to_draw {
             let style = self.style.word_color;
             let style = Rgba::new(style.0, style.1, style.2, style.3);
             for (i, c) in paragraph.word.chars().enumerate() {
@@ -208,6 +214,7 @@ impl View for TypingBox {
                         self.paragraph_index = self.selected_word_index;
                         self.mode = Mode::Typing;
                         self.written = String::new();
+                        self.word_list_visible = false;
                         return Handled::Sink;
                     }
                     _ => {}
@@ -247,6 +254,7 @@ impl View for TypingBox {
                         }
                         Key::Escape => {
                             self.mode = Mode::Selecting;
+                            self.word_list_visible = true;
                             return Handled::Sink;
                         }
                         _ => {}

@@ -16,12 +16,21 @@ use too::view::Ui;
 use too::view::View;
 use too::view::ViewEvent;
 
+#[derive(Debug, PartialEq, Eq)]
+enum Mode {
+    Selecting,
+    Typing,
+}
+
 #[derive(Debug)]
 struct TypingBox {
     paragraphs: Vec<Paragraph>,
     pub written: String,
     paragraph_index: usize,
     style: Style,
+    word_list_visible: bool,
+    selected_word_index: usize,
+    mode: Mode,
 }
 
 impl Default for TypingBox {
@@ -31,6 +40,9 @@ impl Default for TypingBox {
             paragraph_index: 0,
             written: String::new(),
             style: Style::default(),
+            word_list_visible: true,
+            selected_word_index: 0,
+            mode: Mode::Selecting,
         }
     }
 }
@@ -76,13 +88,55 @@ impl View for TypingBox {
         let lighten = self.style.lighten;
         let style = Rgba::new(style.0, style.1, style.2, style.3).lighten(lighten);
         render.fill_bg(style);
+
+        let word_list_width = if self.word_list_visible {
+            let mut max_len = 0;
+            for p in &self.paragraphs {
+                max_len = max_len.max(p.word.len());
+            }
+            for (i, p) in self.paragraphs.iter().enumerate() {
+                let y = i as i32;
+                let mut shape = TextShape::new(&p.word);
+                if i == self.selected_word_index {
+                    let style = self.style.spell_correct;
+                    let style = Rgba::new(style.0, style.1, style.2, style.3);
+                    shape = shape.fg(style);
+                } else {
+                    let style = self.style.shadow_text;
+                    let style = Rgba::new(style.0, style.1, style.2, style.3);
+                    shape = shape.fg(style);
+                }
+                for (i, c) in p.word.chars().enumerate() {
+                    let mut pixel = Pixel::new(c);
+                    if i == self.selected_word_index {
+                        let style = self.style.spell_correct;
+                        let style = Rgba::new(style.0, style.1, style.2, style.3);
+                        pixel = pixel.fg(style);
+                    } else {
+                        let style = self.style.shadow_text;
+                        let style = Rgba::new(style.0, style.1, style.2, style.3);
+                        pixel = pixel.fg(style);
+                    }
+                    render.set((i as i32, y), pixel);
+                }
+            }
+            max_len as i32 + 5 // 5 for padding
+        } else {
+            0
+        };
+
         let mut others = self.written.chars().peekable();
         let top_margin = 10;
 
         if let Some(paragraph) = self.paragraphs.get(self.paragraph_index) {
             let style = self.style.word_color;
             let style = Rgba::new(style.0, style.1, style.2, style.3);
-            render.text(TextShape::new(&paragraph.word).fg(style));
+            for (i, c) in paragraph.word.chars().enumerate() {
+                render.set(
+                    (word_list_width + i as i32, 0),
+                    Pixel::new(c).fg(style),
+                );
+            }
 
             for (line_index, line) in paragraph.paragraph.lines().enumerate() {
                 for (char_index, c) in line.char_indices() {
@@ -98,14 +152,26 @@ impl View for TypingBox {
                                 Pixel::new(if c != ' ' { c } else { '_' }).fg(style)
                             };
 
-                            render.set((char_index as i32, line_index as i32 + top_margin), pixel);
+                            render.set(
+                                (
+                                    char_index as i32 + word_list_width,
+                                    line_index as i32 + top_margin,
+                                ),
+                                pixel,
+                            );
                         }
                         None => {
                             let style = self.style.shadow_text;
                             let style = Rgba::new(style.0, style.1, style.2, style.3);
                             let pixel = Pixel::new(c).fg(style);
 
-                            render.set((char_index as i32, line_index as i32 + top_margin), pixel);
+                            render.set(
+                                (
+                                    char_index as i32 + word_list_width,
+                                    line_index as i32 + top_margin,
+                                ),
+                                pixel,
+                            );
                         }
                     }
                 }
@@ -119,36 +185,73 @@ impl View for TypingBox {
 
     fn event(&mut self, event: ViewEvent, _ctx: EventCtx) -> Handled {
         if let ViewEvent::KeyInput { key, modifiers, .. } = event {
-            match key {
-                Key::Char(c) => {
-                    if self.written.len()
-                        < self
-                            .paragraphs
-                            .get(self.paragraph_index)
-                            .unwrap()
-                            .paragraph
-                            .len()
-                    {
-                        self.written.push(c);
-                    }
+            if let Key::Char('l') = key {
+                if modifiers.is_ctrl() {
+                    self.word_list_visible = !self.word_list_visible;
                     return Handled::Sink;
                 }
-                Key::Delete | Key::Backspace => {
-                    self.written.pop();
-                    return Handled::Sink;
-                }
-                Key::Tab => {
-                    if modifiers.is_shift() {
-                        self.written = String::new();
-                        self.paragraph_index = self.paragraph_index.checked_sub(1).unwrap_or(0);
-                    } else {
-                        self.written = String::new();
-                        if self.paragraph_index < self.paragraphs.len() {
-                            self.paragraph_index += 1;
+            }
+
+            match self.mode {
+                Mode::Selecting => match key {
+                    Key::Char('j') | Key::Down => {
+                        if self.selected_word_index + 1 < self.paragraphs.len() {
+                            self.selected_word_index += 1;
                         }
+                        return Handled::Sink;
+                    }
+                    Key::Char('k') | Key::Up => {
+                        self.selected_word_index = self.selected_word_index.saturating_sub(1);
+                        return Handled::Sink;
+                    }
+                    Key::Enter => {
+                        self.paragraph_index = self.selected_word_index;
+                        self.mode = Mode::Typing;
+                        self.written = String::new();
+                        return Handled::Sink;
+                    }
+                    _ => {}
+                },
+                Mode::Typing => {
+                    match key {
+                        Key::Char(c) => {
+                            if self.written.len()
+                                < self
+                                    .paragraphs
+                                    .get(self.paragraph_index)
+                                    .unwrap()
+                                    .paragraph
+                                    .len()
+                            {
+                                self.written.push(c);
+                            }
+                            return Handled::Sink;
+                        }
+                        Key::Delete | Key::Backspace => {
+                            self.written.pop();
+                            return Handled::Sink;
+                        }
+                        Key::Tab => {
+                            if modifiers.is_shift() {
+                                self.written = String::new();
+                                self.paragraph_index =
+                                    self.paragraph_index.checked_sub(1).unwrap_or(0);
+                            } else {
+                                self.written = String::new();
+                                if self.paragraph_index < self.paragraphs.len() - 1 {
+                                    self.paragraph_index += 1;
+                                }
+                            }
+                            self.selected_word_index = self.paragraph_index;
+                            return Handled::Sink;
+                        }
+                        Key::Escape => {
+                            self.mode = Mode::Selecting;
+                            return Handled::Sink;
+                        }
+                        _ => {}
                     }
                 }
-                _ => {}
             }
         };
         Handled::Bubble

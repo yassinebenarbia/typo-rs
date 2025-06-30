@@ -94,10 +94,10 @@ impl View for TypingBox {
             for p in &self.paragraphs {
                 max_len = max_len.max(p.word.len());
             }
-            for (i, p) in self.paragraphs.iter().enumerate() {
-                let y = i as i32;
+            for (word_index, p) in self.paragraphs.iter().enumerate() {
+                let y = word_index as i32;
                 let mut shape = TextShape::new(&p.word);
-                if i == self.selected_word_index {
+                if word_index == self.selected_word_index {
                     let style = self.style.spell_correct;
                     let style = Rgba::new(style.0, style.1, style.2, style.3);
                     shape = shape.fg(style);
@@ -106,9 +106,9 @@ impl View for TypingBox {
                     let style = Rgba::new(style.0, style.1, style.2, style.3);
                     shape = shape.fg(style);
                 }
-                for (i, c) in p.word.chars().enumerate() {
+                for (char_index, c) in p.word.chars().enumerate() {
                     let mut pixel = Pixel::new(c);
-                    if i == self.selected_word_index {
+                    if word_index == self.selected_word_index {
                         let style = self.style.spell_correct;
                         let style = Rgba::new(style.0, style.1, style.2, style.3);
                         pixel = pixel.fg(style);
@@ -117,7 +117,7 @@ impl View for TypingBox {
                         let style = Rgba::new(style.0, style.1, style.2, style.3);
                         pixel = pixel.fg(style);
                     }
-                    render.set((i as i32, y), pixel);
+                    render.set((char_index as i32, y), pixel);
                 }
             }
             max_len as i32 + 5 // 5 for padding

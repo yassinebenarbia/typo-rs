@@ -33,7 +33,7 @@ Check [config.example.toml](./config.example.toml)
 
 # TODOs
 - [ ] Show typing stats
-    - [ ] Calculate WPM
+    - [x] Calculate WPM
     - [ ] Calculate accuracy
     - [ ] Show learned words
     - [ ] Show typing accuracy over time (days/weeks/etc)

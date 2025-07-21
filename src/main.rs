@@ -8,13 +8,23 @@ use too::renderer::Pixel;
 use too::renderer::Rgba;
 use too::renderer::TextShape;
 use too::view::Builder;
+
 use too::view::EventCtx;
 use too::view::Handled;
 use too::view::Interest;
 use too::view::Layout;
 use too::view::Ui;
 use too::view::View;
+use std::time::Instant;
 use too::view::ViewEvent;
+
+
+
+#[derive(Debug, PartialEq, Eq)]
+enum Mode {
+    Selecting,
+    Typing,
+}
 
 #[derive(Debug)]
 struct TypingBox {
@@ -22,6 +32,11 @@ struct TypingBox {
     pub written: String,
     paragraph_index: usize,
     style: Style,
+    word_list_visible: bool,
+    selected_word_index: usize,
+    mode: Mode,
+    start_time: Option<Instant>,
+    wpm: f64,
 }
 
 impl Default for TypingBox {
@@ -31,6 +46,11 @@ impl Default for TypingBox {
             paragraph_index: 0,
             written: String::new(),
             style: Style::default(),
+            word_list_visible: true,
+            selected_word_index: 0,
+            mode: Mode::Selecting,
+            start_time: None,
+            wpm: 0.0,
         }
     }
 }
@@ -47,6 +67,15 @@ impl TypingBox {
         self.style = config.style;
 
         self
+    }
+
+    fn update_wpm(&mut self) {
+        if let Some(start_time) = self.start_time {
+            let elapsed = start_time.elapsed().as_secs_f64();
+            if elapsed > 0.0 {
+                self.wpm = (self.written.len() as f64 / 5.0) / (elapsed / 60.0);
+            }
+        }
     }
 }
 
@@ -76,13 +105,90 @@ impl View for TypingBox {
         let lighten = self.style.lighten;
         let style = Rgba::new(style.0, style.1, style.2, style.3).lighten(lighten);
         render.fill_bg(style);
+
+        if self.wpm > 0.0 {
+            let wpm_str = format!("{:.2} WPM", self.wpm);
+            let wpm_len = wpm_str.len() as i32;
+            let wpm_style = self.style.spell_correct;
+            let wpm_color = Rgba::new(wpm_style.0, wpm_style.1, wpm_style.2, wpm_style.3);
+
+            if let Ok((w, _)) = crossterm::terminal::size() {
+                let x_offset = w as i32 - wpm_len;
+                for (i, c) in wpm_str.chars().enumerate() {
+                    render.set((x_offset + i as i32, 0), Pixel::new(c).fg(wpm_color));
+                }
+            } else {
+                for (i, c) in wpm_str.chars().enumerate() {
+                    render.set((i as i32, 0), Pixel::new(c).fg(wpm_color));
+                }
+            }
+        }
+
+        let word_list_width = if self.word_list_visible {
+            let mut max_len = 0;
+            for p in &self.paragraphs {
+                max_len = max_len.max(p.word.len());
+            }
+            for (word_index, p) in self.paragraphs.iter().enumerate() {
+                let y = word_index as i32;
+                let mut _shape = TextShape::new(&p.word);
+                if word_index == self.selected_word_index {
+                    let style = self.style.spell_correct;
+                    let style = Rgba::new(style.0, style.1, style.2, style.3);
+                    _shape = _shape.fg(style);
+                } else {
+                    let style = self.style.shadow_text;
+                    let style = Rgba::new(style.0, style.1, style.2, style.3);
+                    _shape = _shape.fg(style);
+                }
+                for (char_index, c) in p.word.chars().enumerate() {
+                    let mut pixel = Pixel::new(c);
+                    if word_index == self.selected_word_index {
+                        let style = self.style.spell_correct;
+                        let style = Rgba::new(style.0, style.1, style.2, style.3);
+                        pixel = pixel.fg(style);
+                    } else {
+                        let style = self.style.shadow_text;
+                        let style = Rgba::new(style.0, style.1, style.2, style.3);
+                        pixel = pixel.fg(style);
+                    }
+                    render.set((char_index as i32, y), pixel);
+                }
+            }
+            max_len as i32 + 5 // 5 for padding
+        } else {
+            0
+        };
+
         let mut others = self.written.chars().peekable();
         let top_margin = 10;
 
-        if let Some(paragraph) = self.paragraphs.get(self.paragraph_index) {
+        let paragraph_to_draw = if self.mode == Mode::Selecting {
+            self.paragraphs.get(self.selected_word_index)
+        } else {
+            self.paragraphs.get(self.paragraph_index)
+        };
+
+        if let Some(paragraph) = paragraph_to_draw {
             let style = self.style.word_color;
             let style = Rgba::new(style.0, style.1, style.2, style.3);
-            render.text(TextShape::new(&paragraph.word).fg(style));
+            let word_len = paragraph.word.len() as i32;
+            if let Ok((w, _)) = crossterm::terminal::size() {
+                let center_offset = (w as i32 - word_len) / 2;
+                for (i, c) in paragraph.word.chars().enumerate() {
+                    render.set(
+                        (center_offset + i as i32, 0),
+                        Pixel::new(c).fg(style),
+                    );
+                }
+            } else {
+                for (i, c) in paragraph.word.chars().enumerate() {
+                    render.set(
+                        (word_list_width + i as i32, 0),
+                        Pixel::new(c).fg(style),
+                    );
+                }
+            };
 
             for (line_index, line) in paragraph.paragraph.lines().enumerate() {
                 for (char_index, c) in line.char_indices() {
@@ -98,17 +204,41 @@ impl View for TypingBox {
                                 Pixel::new(if c != ' ' { c } else { '_' }).fg(style)
                             };
 
-                            render.set((char_index as i32, line_index as i32 + top_margin), pixel);
+                            render.set(
+                                (
+                                    char_index as i32 + word_list_width,
+                                    line_index as i32 + top_margin,
+                                ),
+                                pixel,
+                            );
                         }
                         None => {
                             let style = self.style.shadow_text;
                             let style = Rgba::new(style.0, style.1, style.2, style.3);
                             let pixel = Pixel::new(c).fg(style);
 
-                            render.set((char_index as i32, line_index as i32 + top_margin), pixel);
+                            render.set(
+                                (
+                                    char_index as i32 + word_list_width,
+                                    line_index as i32 + top_margin,
+                                ),
+                                pixel,
+                            );
                         }
                     }
                 }
+            }
+        }
+
+        let (mode_str, color) = match self.mode {
+            Mode::Selecting => ("SELECT", self.style.spell_correct),
+            Mode::Typing => ("TYPE", self.style.spell_erro),
+        };
+        let color = Rgba::new(color.0, color.1, color.2, color.3);
+        if let Ok((_w, y)) = crossterm::terminal::size() {
+            let y = y as i32 - 1;
+            for (i, c) in mode_str.chars().enumerate() {
+                render.set((i as i32, y), Pixel::new(c).fg(color));
             }
         }
     }
@@ -119,36 +249,91 @@ impl View for TypingBox {
 
     fn event(&mut self, event: ViewEvent, _ctx: EventCtx) -> Handled {
         if let ViewEvent::KeyInput { key, modifiers, .. } = event {
-            match key {
-                Key::Char(c) => {
-                    if self.written.len()
-                        < self
-                            .paragraphs
-                            .get(self.paragraph_index)
-                            .unwrap()
-                            .paragraph
-                            .len()
-                    {
-                        self.written.push(c);
+            if let Key::Char('l') = key {
+                if modifiers.is_ctrl() {
+                    self.word_list_visible = !self.word_list_visible;
+                    if self.word_list_visible && self.mode == Mode::Typing {
+                        self.selected_word_index = self.paragraph_index;
                     }
                     return Handled::Sink;
                 }
-                Key::Delete | Key::Backspace => {
-                    self.written.pop();
-                    return Handled::Sink;
-                }
-                Key::Tab => {
-                    if modifiers.is_shift() {
-                        self.written = String::new();
-                        self.paragraph_index = self.paragraph_index.checked_sub(1).unwrap_or(0);
-                    } else {
-                        self.written = String::new();
-                        if self.paragraph_index < self.paragraphs.len() {
-                            self.paragraph_index += 1;
+            }
+
+            match self.mode {
+                Mode::Selecting => match key {
+                    Key::Char('j') | Key::Down => {
+                        if self.selected_word_index + 1 < self.paragraphs.len() {
+                            self.selected_word_index += 1;
                         }
+                        return Handled::Sink;
+                    }
+                    Key::Char('k') | Key::Up => {
+                        self.selected_word_index = self.selected_word_index.saturating_sub(1);
+                        return Handled::Sink;
+                    }
+                    Key::Enter => {
+                        self.paragraph_index = self.selected_word_index;
+                        self.mode = Mode::Typing;
+                        self.written = String::new();
+                        self.word_list_visible = false;
+                        self.start_time = Some(Instant::now());
+                        self.wpm = 0.0;
+                        return Handled::Sink;
+                    }
+                    _ => {}
+                },
+                Mode::Typing => {
+                    match key {
+                        Key::Char(c) => {
+                            if self.written.is_empty() {
+                                self.start_time = Some(Instant::now());
+                            }
+                            if self.written.len()
+                                < self
+                                    .paragraphs
+                                    .get(self.paragraph_index)
+                                    .unwrap()
+                                    .paragraph
+                                    .len()
+                            {
+                                self.written.push(c);
+                            }
+                            self.update_wpm();
+                            return Handled::Sink;
+                        }
+                        Key::Delete | Key::Backspace => {
+                            self.written.pop();
+                            self.update_wpm();
+                            return Handled::Sink;
+                        }
+                        Key::Tab => {
+                            self.update_wpm();
+
+                            if modifiers.is_shift() {
+                                self.written = String::new();
+                                self.paragraph_index =
+                                    self.paragraph_index.checked_sub(1).unwrap_or(0);
+                            } else {
+                                self.written = String::new();
+                                if self.paragraph_index < self.paragraphs.len() - 1 {
+                                    self.paragraph_index += 1;
+                                }
+                            }
+                            self.selected_word_index = self.paragraph_index;
+                            self.start_time = None;
+                            return Handled::Sink;
+                        }
+                        Key::Escape => {
+                            self.mode = Mode::Selecting;
+                            self.word_list_visible = true;
+                            self.selected_word_index = self.paragraph_index;
+                            self.start_time = None;
+                            self.wpm = 0.0;
+                            return Handled::Sink;
+                        }
+                        _ => {}
                     }
                 }
-                _ => {}
             }
         };
         Handled::Bubble
@@ -232,7 +417,11 @@ struct Config {
 
 fn main() -> std::io::Result<()> {
     let app = |ui: &Ui| {
-        let filepath = std::env::args().nth(1).unwrap_or("./config.toml".into());
+        let filepath = std::env::args().nth(1).unwrap_or_else(||{
+            let mut home = std::env::var("HOME").unwrap().to_string();
+            home.push_str("/.config/typo-rs/config.toml");
+            home
+        });
         let content = std::fs::read_to_string(filepath).unwrap();
         let config: Config = toml::from_str(&content).unwrap();
 
